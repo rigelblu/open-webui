@@ -1,27 +1,28 @@
-
+# =====================================
+# Docker target
 ifneq ($(shell which docker-compose 2>/dev/null),)
     DOCKER_COMPOSE := docker-compose
 else
     DOCKER_COMPOSE := docker compose
 endif
 
-install:
+docker-install:
 	$(DOCKER_COMPOSE) up -d
 
-remove:
+docker-remove:
 	@chmod +x confirm_remove.sh
 	@./confirm_remove.sh
 
-start:
+docker-start:
 	$(DOCKER_COMPOSE) start
-startAndBuild: 
+
+docker-build:
 	$(DOCKER_COMPOSE) up -d --build
 
-stop:
+docker-stop:
 	$(DOCKER_COMPOSE) stop
 
-update:
-	# Calls the LLM update script
+docker-update:
 	chmod +x update_ollama_models.sh
 	@./update_ollama_models.sh
 	@git pull
