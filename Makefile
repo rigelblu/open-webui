@@ -1,27 +1,28 @@
-
+# =====================================
+# Docker target
 ifneq ($(shell which docker-compose 2>/dev/null),)
     DOCKER_COMPOSE := docker-compose
 else
     DOCKER_COMPOSE := docker compose
 endif
 
-install:
+docker-install:
 	$(DOCKER_COMPOSE) up -d
 
-remove:
+docker-remove:
 	@chmod +x confirm_remove.sh
 	@./confirm_remove.sh
 
-start:
+docker-start:
 	$(DOCKER_COMPOSE) start
-startAndBuild: 
+
+docker-build:
 	$(DOCKER_COMPOSE) up -d --build
 
-stop:
+docker-stop:
 	$(DOCKER_COMPOSE) stop
 
-update:
-	# Calls the LLM update script
+docker-update:
 	chmod +x update_ollama_models.sh
 	@./update_ollama_models.sh
 	@git pull
@@ -31,3 +32,54 @@ update:
 	$(DOCKER_COMPOSE) up --build -d
 	$(DOCKER_COMPOSE) start
 
+# =====================================
+# Local targets
+PYTHON_VERSION := 3.11
+PYTHON_BREW_FORMULA := python@$(PYTHON_VERSION)
+PYTHON := python$(PYTHON_VERSION)
+VENV := .venv
+
+local-start: local-install
+	$(VENV)/bin/open-webui serve
+
+local-install: $(VENV)
+
+$(VENV):
+	$(PYTHON) -m venv $(VENV)
+	$(VENV)/bin/pip install open-webui
+
+# =====================================
+# MacOS target
+LAUNCH_AGENT := ~/Library/LaunchAgents/com.$(USER).open-webui.plist
+PYTHON_BREW_FORMULA := python@$(PYTHON_VERSION)
+
+mac-start: mac-deps
+	$(MAKE) local-start
+
+mac-launch-start: mac-install
+	launchctl load $(LAUNCH_AGENT)
+
+mac-launch-restart: mac-launch-stop
+	$(MAKE) mac-launch-start
+
+mac-launch-stop:
+	launchctl unload $(LAUNCH_AGENT)
+
+mac-clean:
+	rm -rf $(VENV)
+
+mac-install: mac-deps local-install
+	sed "s/\$$USER/$(USER)/g" com.user.open-webui.plist > $(LAUNCH_AGENT)
+	chmod 644 $(LAUNCH_AGENT)
+	@echo
+	@echo ">> Add to /etc/hosts"
+	@echo "127.0.0.1   openllm.local"
+	@echo
+
+mac-deps:
+	@brew list $(PYTHON_BREW_FORMULA) >/dev/null 2>&1 || brew install $(PYTHON_BREW_FORMULA)
+
+# =====================================
+# Phony targets
+.PHONY: docker-install docker-remove docker-start docker-build docker-stop docker-update \
+        local-install local-start macos-launchtl
