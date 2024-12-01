@@ -32,3 +32,54 @@ docker-update:
 	$(DOCKER_COMPOSE) up --build -d
 	$(DOCKER_COMPOSE) start
 
+# =====================================
+# Local targets
+PYTHON_VERSION := 3.11
+PYTHON_BREW_FORMULA := python@$(PYTHON_VERSION)
+PYTHON := python$(PYTHON_VERSION)
+VENV := .venv
+
+local-start: local-install
+	$(VENV)/bin/open-webui serve
+
+local-install: $(VENV)
+
+$(VENV):
+	$(PYTHON) -m venv $(VENV)
+	$(VENV)/bin/pip install open-webui
+
+# =====================================
+# MacOS target
+LAUNCH_AGENT := ~/Library/LaunchAgents/com.$(USER).open-webui.plist
+PYTHON_BREW_FORMULA := python@$(PYTHON_VERSION)
+
+mac-start: mac-deps
+	$(MAKE) local-start
+
+mac-launch-start: mac-install
+	launchctl load $(LAUNCH_AGENT)
+
+mac-launch-restart: mac-launch-stop
+	$(MAKE) mac-launch-start
+
+mac-launch-stop:
+	launchctl unload $(LAUNCH_AGENT)
+
+mac-clean:
+	rm -rf $(VENV)
+
+mac-install: mac-deps local-install
+	sed "s/\$$USER/$(USER)/g" com.user.open-webui.plist > $(LAUNCH_AGENT)
+	chmod 644 $(LAUNCH_AGENT)
+	@echo
+	@echo ">> Add to /etc/hosts"
+	@echo "127.0.0.1   openllm.local"
+	@echo
+
+mac-deps:
+	@brew list $(PYTHON_BREW_FORMULA) >/dev/null 2>&1 || brew install $(PYTHON_BREW_FORMULA)
+
+# =====================================
+# Phony targets
+.PHONY: docker-install docker-remove docker-start docker-build docker-stop docker-update \
+        local-install local-start macos-launchtl

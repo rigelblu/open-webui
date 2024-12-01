@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+    "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.$USER.open-webui</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/$USER/src/rb/open-webui/.venv/bin/open-webui</string>
+        <string>serve</string>
+    </array>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>WEBUI_SECRET_KEY</key>
+        <string>/Users/$USER/.webui_secret_key</string>
+    </dict>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/$USER/src/rb/open-webui</string>
+
+    <key>RunAtLoad</key>
+    <true />
+
+    <key>KeepAlive</key>
+    <true />
+
+    <key>StandardErrorPath</key>
+    <string>/Users/$USER/Library/Logs/open-webui.err.log</string>
+
+    <key>StandardOutPath</key>
+    <string>/Users/$USER/Library/Logs/open-webui.out.log</string>
+</dict>
+</plist>
