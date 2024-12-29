@@ -53,7 +53,7 @@ $(VENV):
 LAUNCH_AGENT := ~/Library/LaunchAgents/com.$(USER).open-webui.plist
 PYTHON_BREW_FORMULA := python@$(PYTHON_VERSION)
 
-mac-start: mac-deps
+mac-local-start: mac-deps
 	$(MAKE) local-start
 
 mac-launch-start: mac-install
