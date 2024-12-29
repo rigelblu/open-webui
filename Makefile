@@ -33,6 +33,17 @@ docker-update:
 	$(DOCKER_COMPOSE) start
 
 # =====================================
+# Update
+update-to-latest:
+	git checkout main
+	git pull upstream
+	$(MAKE) mac-launch-stop
+	rm -rf .venv
+	make local-install
+	$(MAKE) mac-launch-start
+	git push origin main
+
+# =====================================
 # Local targets
 PYTHON_VERSION := 3.11
 PYTHON_BREW_FORMULA := python@$(PYTHON_VERSION)
@@ -53,7 +64,7 @@ $(VENV):
 LAUNCH_AGENT := ~/Library/LaunchAgents/com.$(USER).open-webui.plist
 PYTHON_BREW_FORMULA := python@$(PYTHON_VERSION)
 
-mac-start: mac-deps
+mac-local-start: mac-deps
 	$(MAKE) local-start
 
 mac-launch-start: mac-install
