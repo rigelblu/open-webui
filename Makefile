@@ -33,6 +33,17 @@ docker-update:
 	$(DOCKER_COMPOSE) start
 
 # =====================================
+# Update
+update-to-latest:
+	git checkout main
+	git pull upstream
+	$(MAKE) mac-launch-stop
+	rm -rf .venv
+	make local-install
+	$(MAKE) mac-launch-start
+	git push origin main
+
+# =====================================
 # Local targets
 PYTHON_VERSION := 3.11
 PYTHON_BREW_FORMULA := python@$(PYTHON_VERSION)
