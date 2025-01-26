@@ -34,13 +34,12 @@ docker-update:
 
 # =====================================
 # Update
-update-to-latest:
-	@git rev-parse --abbrev-ref HEAD | grep -q "^main$$" || git checkout main
-	git pull upstream
-	$(MAKE) mac-launch-stop
-	rm -rf .venv
-	make local-install
-	$(MAKE) mac-launch-start
+update: merge-upstream local-update mac-launch-restart
+
+merge-upstream:
+	git fetch upstream
+	git checkout main
+	git merge --no-edit --ff-only upstream/main
 	git push origin main
 
 # =====================================
