@@ -35,7 +35,7 @@ docker-update:
 # =====================================
 # Update
 update-to-latest:
-	git checkout main
+	@git rev-parse --abbrev-ref HEAD | grep -q "^main$$" || git checkout main
 	git pull upstream
 	$(MAKE) mac-launch-stop
 	rm -rf .venv
