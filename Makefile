@@ -44,19 +44,25 @@ merge-upstream:
 
 # =====================================
 # Local targets
-PYTHON_VERSION := 3.11
-PYTHON_BREW_FORMULA := python@$(PYTHON_VERSION)
+PYTHON_VERSION ?= 3.11
 PYTHON := python$(PYTHON_VERSION)
 VENV := .venv
+
+local-clean:
+	rm -rf $(VENV)
 
 local-start: local-install
 	$(VENV)/bin/open-webui serve
 
 local-install: $(VENV)
+	$(VENV)/bin/pip install open-webui
+
+local-update: local-clean local-install
 
 $(VENV):
+	command -v $(PYTHON) >/dev/null 2>&1 || (echo "$(PYTHON) not found. Please install"; exit 1)
 	$(PYTHON) -m venv $(VENV)
-	$(VENV)/bin/pip install open-webui
+	$(VENV)/bin/pip install --upgrade pip
 
 # =====================================
 # MacOS target
