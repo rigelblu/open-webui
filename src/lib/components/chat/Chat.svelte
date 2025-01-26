@@ -44,7 +44,8 @@
 		extractSentencesForAudio,
 		promptTemplate,
 		splitStream,
-		sleep
+		sleep,
+		removeDetailsWithReasoning
 	} from '$lib/utils';
 
 	import { generateChatCompletion } from '$lib/apis/ollama';
@@ -111,6 +112,7 @@
 	$: selectedModelIds = atSelectedModel !== undefined ? [atSelectedModel.id] : selectedModels;
 
 	let selectedToolIds = [];
+	let imageGenerationEnabled = false;
 	let webSearchEnabled = false;
 
 	let chat = null;
@@ -137,6 +139,7 @@
 			files = [];
 			selectedToolIds = [];
 			webSearchEnabled = false;
+			imageGenerationEnabled = false;
 
 			loaded = false;
 
@@ -152,6 +155,7 @@
 						files = input.files;
 						selectedToolIds = input.selectedToolIds;
 						webSearchEnabled = input.webSearchEnabled;
+						imageGenerationEnabled = input.imageGenerationEnabled;
 					} catch (e) {}
 				}
 
@@ -318,6 +322,19 @@
 					eventConfirmationMessage = data.message;
 					eventConfirmationInputPlaceholder = data.placeholder;
 					eventConfirmationInputValue = data?.value ?? '';
+				} else if (type === 'notification') {
+					const toastType = data?.type ?? 'info';
+					const toastContent = data?.content ?? '';
+
+					if (toastType === 'success') {
+						toast.success(toastContent);
+					} else if (toastType === 'error') {
+						toast.error(toastContent);
+					} else if (toastType === 'warning') {
+						toast.warning(toastContent);
+					} else {
+						toast.info(toastContent);
+					}
 				} else {
 					console.log('Unknown message type', data);
 				}
@@ -390,11 +407,13 @@
 				files = input.files;
 				selectedToolIds = input.selectedToolIds;
 				webSearchEnabled = input.webSearchEnabled;
+				imageGenerationEnabled = input.imageGenerationEnabled;
 			} catch (e) {
 				prompt = '';
 				files = [];
 				selectedToolIds = [];
 				webSearchEnabled = false;
+				imageGenerationEnabled = false;
 			}
 		}
 
@@ -427,7 +446,7 @@
 	onDestroy(() => {
 		chatIdUnsubscriber?.();
 		window.removeEventListener('message', onMessageHandler);
-		// $socket?.off('chat-events');
+		$socket?.off('chat-events', chatEventHandler);
 	});
 
 	// File upload functions
@@ -696,6 +715,9 @@
 		if ($page.url.searchParams.get('web-search') === 'true') {
 			webSearchEnabled = true;
 		}
+		if ($page.url.searchParams.get('image-generation') === 'true') {
+			imageGenerationEnabled = true;
+		}
 
 		if ($page.url.searchParams.get('tools')) {
 			selectedToolIds = $page.url.searchParams
@@ -830,22 +852,25 @@
 			session_id: $socket?.id,
 			id: responseMessageId
 		}).catch((error) => {
-			toast.error(error);
+			toast.error(`${error}`);
 			messages.at(-1).error = { content: error };
 
 			return null;
 		});
 
-		if (res !== null) {
+		if (res !== null && res.messages) {
 			// Update chat history with the new messages
 			for (const message of res.messages) {
-				history.messages[message.id] = {
-					...history.messages[message.id],
-					...(history.messages[message.id].content !== message.content
-						? { originalContent: history.messages[message.id].content }
-						: {}),
-					...message
-				};
+				if (message?.id) {
+					// Add null check for message and message.id
+					history.messages[message.id] = {
+						...history.messages[message.id],
+						...(history.messages[message.id].content !== message.content
+							? { originalContent: history.messages[message.id].content }
+							: {}),
+						...message
+					};
+				}
 			}
 		}
 
@@ -885,12 +910,12 @@
 			session_id: $socket?.id,
 			id: responseMessageId
 		}).catch((error) => {
-			toast.error(error);
+			toast.error(`${error}`);
 			messages.at(-1).error = { content: error };
 			return null;
 		});
 
-		if (res !== null) {
+		if (res !== null && res.messages) {
 			// Update chat history with the new messages
 			for (const message of res.messages) {
 				history.messages[message.id] = {
@@ -1053,7 +1078,7 @@
 	};
 
 	const chatCompletionEventHandler = async (data, message, chatId) => {
-		const { id, done, choices, sources, selected_model_id, error, usage } = data;
+		const { id, done, choices, content, sources, selected_model_id, error, usage } = data;
 
 		if (error) {
 			await handleOpenAIError(error, message);
@@ -1105,6 +1130,38 @@
 			}
 		}
 
+		if (content) {
+			// REALTIME_CHAT_SAVE is disabled
+			message.content = content;
+
+			if (navigator.vibrate && ($settings?.hapticFeedback ?? false)) {
+				navigator.vibrate(5);
+			}
+
+			// Emit chat event for TTS
+			const messageContentParts = getMessageContentParts(
+				message.content,
+				$config?.audio?.tts?.split_on ?? 'punctuation'
+			);
+			messageContentParts.pop();
+
+			// dispatch only last sentence and make sure it hasn't been dispatched before
+			if (
+				messageContentParts.length > 0 &&
+				messageContentParts[messageContentParts.length - 1] !== message.lastSentence
+			) {
+				message.lastSentence = messageContentParts[messageContentParts.length - 1];
+				eventTarget.dispatchEvent(
+					new CustomEvent('chat', {
+						detail: {
+							id: message.id,
+							content: messageContentParts[messageContentParts.length - 1]
+						}
+					})
+				);
+			}
+		}
+
 		if (selected_model_id) {
 			message.selectedModelId = selected_model_id;
 			message.arena = true;
@@ -1114,15 +1171,10 @@
 			message.usage = usage;
 		}
 
+		history.messages[message.id] = message;
+
 		if (done) {
 			message.done = true;
-
-			if ($settings.notificationEnabled && !document.hasFocus()) {
-				new Notification(`${message.model}`, {
-					body: message.content,
-					icon: `${WEBUI_BASE_URL}/static/favicon.png`
-				});
-			}
 
 			if ($settings.responseAutoCopy) {
 				copyToClipboard(message.content);
@@ -1157,8 +1209,6 @@
 			history.messages[message.id] = message;
 			await chatCompletedHandler(chatId, message.model, message.id, createMessagesList(message.id));
 		}
-
-		history.messages[message.id] = message;
 
 		console.log(data);
 		if (autoScroll) {
@@ -1323,7 +1373,8 @@
 				history.currentId = responseMessageId;
 
 				// Append messageId to childrenIds of parent message
-				if (parentId !== null) {
+				if (parentId !== null && history.messages[parentId]) {
+					// Add null check before accessing childrenIds
 					history.messages[parentId].childrenIds = [
 						...history.messages[parentId].childrenIds,
 						responseMessageId
@@ -1367,7 +1418,7 @@
 					if ($settings?.memory ?? false) {
 						if (userContext === null) {
 							const res = await queryMemory(localStorage.token, prompt).catch((error) => {
-								toast.error(error);
+								toast.error(`${error}`);
 								return null;
 							});
 							if (res) {
@@ -1453,7 +1504,10 @@
 						}`
 					}
 				: undefined,
-			...createMessagesList(responseMessageId)
+			...createMessagesList(responseMessageId).map((message) => ({
+				...message,
+				content: removeDetailsWithReasoning(message.content)
+			}))
 		]
 			.filter((message) => message?.content?.trim())
 			.map((message, idx, arr) => ({
@@ -1501,9 +1555,10 @@
 							: undefined
 				},
 
-				files: files.length > 0 ? files : undefined,
+				files: (files?.length ?? 0) > 0 ? files : undefined,
 				tool_ids: selectedToolIds.length > 0 ? selectedToolIds : undefined,
 				features: {
+					image_generation: imageGenerationEnabled,
 					web_search: webSearchEnabled
 				},
 
@@ -1800,13 +1855,13 @@
 	}}
 />
 
-{#if !chatIdProp || (loaded && chatIdProp)}
-	<div
-		class="h-screen max-h-[100dvh] {$showSidebar
-			? 'md:max-w-[calc(100%-260px)]'
-			: ''} w-full max-w-full flex flex-col"
-		id="chat-container"
-	>
+<div
+	class="h-screen max-h-[100dvh] transition-width duration-200 ease-in-out {$showSidebar
+		? '  md:max-w-[calc(100%-260px)]'
+		: ' '} w-full max-w-full flex flex-col"
+	id="chat-container"
+>
+	{#if !chatIdProp || (loaded && chatIdProp)}
 		{#if $settings?.backgroundImageUrl ?? null}
 			<div
 				class="absolute {$showSidebar
@@ -1906,6 +1961,7 @@
 								bind:prompt
 								bind:autoScroll
 								bind:selectedToolIds
+								bind:imageGenerationEnabled
 								bind:webSearchEnabled
 								bind:atSelectedModel
 								transparentBackground={$settings?.backgroundImageUrl ?? false}
@@ -1956,6 +2012,7 @@
 								bind:prompt
 								bind:autoScroll
 								bind:selectedToolIds
+								bind:imageGenerationEnabled
 								bind:webSearchEnabled
 								bind:atSelectedModel
 								transparentBackground={$settings?.backgroundImageUrl ?? false}
@@ -2008,5 +2065,5 @@
 				{eventTarget}
 			/>
 		</PaneGroup>
-	</div>
-{/if}
+	{/if}
+</div>
