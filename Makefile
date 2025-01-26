@@ -66,25 +66,20 @@ $(VENV):
 
 # =====================================
 # MacOS target
-LAUNCH_AGENT := ~/Library/LaunchAgents/com.$(USER).open-webui.plist
+LAUNCH_AGENT := "~/Library/LaunchAgents/com.$(USER).open-webui.plist"
 PYTHON_BREW_FORMULA := python@$(PYTHON_VERSION)
 
-mac-local-start: mac-deps
-	$(MAKE) local-start
+mac-start: mac-deps local-start
 
-mac-launch-start: mac-install
+mac-launch-start: mac-launch-install
 	launchctl load $(LAUNCH_AGENT)
-
-mac-launch-restart: mac-launch-stop
-	$(MAKE) mac-launch-start
 
 mac-launch-stop:
 	launchctl unload $(LAUNCH_AGENT)
 
-mac-clean:
-	rm -rf $(VENV)
+mac-launch-restart: mac-launch-stop mac-launch-start
 
-mac-install: mac-deps local-install
+mac-launch-install:
 	sed "s/\$$USER/$(USER)/g" com.user.open-webui.plist > $(LAUNCH_AGENT)
 	chmod 644 $(LAUNCH_AGENT)
 	@echo
@@ -93,9 +88,12 @@ mac-install: mac-deps local-install
 	@echo
 
 mac-deps:
+	@which brew >/dev/null 2>&1 || (echo "Homebrew not found. Please install"; exit 1)
 	@brew list $(PYTHON_BREW_FORMULA) >/dev/null 2>&1 || brew install $(PYTHON_BREW_FORMULA)
 
 # =====================================
 # Phony targets
-.PHONY: docker-install docker-remove docker-start docker-build docker-stop docker-update \
-        local-install local-start macos-launchtl
+.PHONY: update merge-upstream \
+				local-clean local-start local-install local-update \
+        mac-start mac-launch-start mac-launch-stop mac-launch-restart \
+        mac-launch-install mac-deps
